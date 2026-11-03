@@ -1,0 +1,106 @@
+# Part B - Q4 Discussion & Conclusion
+# Compares every member's model (before and after tuning), picks the best one,
+# and compares it with previous published work on the same dataset.
+
+from pathlib import Path
+import pandas as pd
+import matplotlib.pyplot as plt
+
+here = Path(__file__).resolve().parent
+results_file = here / "partB_model_results.csv"
+previous_file = here / "partB_previous_work.csv"
+
+
+def heading(title):
+    print("\n" + title)
+    print("-" * len(title))
+
+
+# create template files the first time, so the team knows the format
+# (the numbers below are EXAMPLES ONLY - replace them with the real results)
+if not results_file.exists():
+    pd.DataFrame({
+        "model":     ["Naive Bayes", "Naive Bayes", "Logistic Regression", "Logistic Regression",
+                      "Linear SVM", "Linear SVM", "Random Forest", "Random Forest"],
+        "stage":     ["before", "after"] * 4,
+        "accuracy":  [0.80, 0.82, 0.85, 0.87, 0.86, 0.88, 0.83, 0.85],
+        "precision": [0.79, 0.81, 0.85, 0.87, 0.86, 0.88, 0.84, 0.86],
+        "recall":    [0.80, 0.82, 0.85, 0.87, 0.86, 0.88, 0.82, 0.84],
+        "f1":        [0.79, 0.81, 0.85, 0.87, 0.86, 0.88, 0.83, 0.85],
+        "train_time_s": [0.1, 0.1, 2.0, 2.5, 1.5, 1.8, 40.0, 55.0],
+        "member":    ["Member 1"] * 2 + ["Member 2"] * 2 + ["Member 3"] * 2 + ["Member 4"] * 2,
+    }).to_csv(results_file, index=False)
+    print(f"Created template: {results_file.name}  <- fill in the real results")
+
+if not previous_file.exists():
+    pd.DataFrame({
+        "study":    ["Author et al. (Year)", "Author et al. (Year)"],
+        "model":    ["Model name", "Model name"],
+        "accuracy": [0.0, 0.0],
+        "f1":       [0.0, 0.0],
+    }).to_csv(previous_file, index=False)
+    print(f"Created template: {previous_file.name}  <- fill in published results")
+
+
+results = pd.read_csv(results_file)
+previous = pd.read_csv(previous_file)
+metrics = ["accuracy", "precision", "recall", "f1"]
+
+
+# 1. results of every model before and after tuning
+heading("All models, before and after tuning")
+table = results.pivot(index="model", columns="stage", values=metrics)
+print(table.round(4).to_string())
+
+
+# 2. how much tuning helped each model
+heading("Effect of hyperparameter tuning (F1)")
+before = results[results.stage == "before"].set_index("model")["f1"]
+after = results[results.stage == "after"].set_index("model")["f1"]
+gain = pd.DataFrame({"before": before, "after": after, "change": after - before})
+print(gain.round(4).sort_values("after", ascending=False).to_string())
+
+
+# 3. ranking of the tuned models and the best one
+heading("Ranking of tuned models (by F1, then accuracy)")
+tuned = results[results.stage == "after"].sort_values(["f1", "accuracy"], ascending=False)
+print(tuned[["model", "member"] + metrics + ["train_time_s"]].round(4).to_string(index=False))
+
+best = tuned.iloc[0]
+runner_up = tuned.iloc[1]
+print(f"\nBest model : {best.model} (F1 = {best.f1:.4f}, accuracy = {best.accuracy:.4f})")
+print(f"Runner-up  : {runner_up.model} (F1 = {runner_up.f1:.4f})")
+print(f"Gap        : {best.f1 - runner_up.f1:.4f} F1")
+
+
+# 4. best model against previous published work
+heading("Comparison with previous work")
+ours = pd.DataFrame({"study": ["This study"], "model": [best.model],
+                     "accuracy": [best.accuracy], "f1": [best.f1]})
+compare = pd.concat([previous, ours], ignore_index=True)
+print(compare.round(4).to_string(index=False))
+
+
+# 5. charts (legend placed outside so it never covers the bars)
+fig, ax = plt.subplots(figsize=(10, 4.5))
+tuned_plot = tuned.set_index("model")[metrics]
+tuned_plot.plot(kind="bar", ax=ax, rot=0)
+ax.set_ylim(max(0, tuned_plot.values.min() - 0.1), 1)
+ax.set_ylabel("Score")
+ax.set_xlabel("")
+ax.set_title("Tuned models compared on all evaluation measures")
+ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1))
+plt.tight_layout()
+plt.savefig(here / "partB_models_compared.png", dpi=150)
+
+fig, ax = plt.subplots(figsize=(9, 4))
+gain[["before", "after"]].plot(kind="bar", ax=ax, rot=0)
+ax.set_ylim(max(0, gain[["before", "after"]].values.min() - 0.1), 1)
+ax.set_ylabel("F1 score")
+ax.set_xlabel("")
+ax.set_title("F1 before and after hyperparameter tuning")
+ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1))
+plt.tight_layout()
+plt.savefig(here / "partB_tuning_effect.png", dpi=150)
+
+plt.show()
